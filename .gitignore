@@ -9,3 +9,4 @@ kind-entry.json
 *_info.json
 *_external_functions.json
 index.html
+*.fmutmp/

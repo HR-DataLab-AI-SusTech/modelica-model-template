@@ -76,8 +76,9 @@ def libraries() -> list[str]:
 
 
 def commit() -> str:
-    """The commit the working tree is, or "" when a tracked file differs from it."""
-    if git("status", "--porcelain", "--untracked-files=no", cwd=ROOT):
+    """The commit the working tree is, or "" when a file differs from it or is not in it
+    (build.mos loads the whole package folder, an untracked file in it too)."""
+    if git("status", "--porcelain", cwd=ROOT):
         return ""
     return git("rev-parse", "HEAD", cwd=ROOT)
 
@@ -85,6 +86,7 @@ def commit() -> str:
 def build() -> None:
     FMU.unlink(missing_ok=True)
     BUILT_FROM.unlink(missing_ok=True)
+    source = commit()  # before the build: a commit made while it runs did not build it
     library_path = ":".join(libraries())
     uid = f"{os.getuid()}:{os.getgid()}" if hasattr(os, "getuid") else "0:0"
     subprocess.run(  # noqa: S603 -- the image is model.toml's, pinned by digest
@@ -102,7 +104,7 @@ def build() -> None:
     if not FMU.is_file():
         raise SystemExit(f"build.mos wrote no {FMU.name}: read omc's messages above")
     BUILT_FROM.parent.mkdir(exist_ok=True)
-    BUILT_FROM.write_text(commit() + "\n", encoding="utf-8")
+    BUILT_FROM.write_text(source + "\n", encoding="utf-8")
     print(f"built {FMU.name}, {FMU.stat().st_size} bytes")
 
 
