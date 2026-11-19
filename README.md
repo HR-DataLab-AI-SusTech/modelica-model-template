@@ -11,6 +11,10 @@ through it from the start.
 
 The example is a tank whose water follows its inflow: `der(water) = (inflow - water) / tau_s`.
 
+![The tank: the inflow goes in, the water comes out, der(water) = (inflow - water) / tau_s](docs/tank.svg)
+
+![From this repository to a run: CI builds and tests the FMU, a tag registers it, the sandbox runs it and the platform scores it](docs/path.svg)
+
 | File | What it is |
 | --- | --- |
 | `Model/package.mo` | the Modelica package; `Model.Tank` is the model |
@@ -47,6 +51,8 @@ uv run python scripts/model.py test           # the FMU against reference/, with
 uv run python scripts/model.py test --write   # reference/outputs.csv from the FMU, after a change
 ```
 
+![The reference test: the inflow steps from 20 to 60 °C at 300 s, and the water rises towards it](docs/reference.svg)
+
 Rewrite the reference only when you mean the model's answer to change, and check the new numbers
 before you commit them. For the tank, the answer is known: after the inflow steps from 20 to
 60 °C at 300 s, `water = 60 - 40·exp(-(t - 300)/600)`. Put inputs into `reference/inputs.csv` that
@@ -70,8 +76,23 @@ inputs over each step.
    FMU it cannot run, or one that differs from the kind's entry, and the job's log names the
    reason (the guide lists them).
 
-A new version serves the runs requested after it. Request one on the twin's page (Models › Runs ›
-Request a run), and compare its output with what was measured.
+A new version serves the runs requested after it.
+
+## On the twin's page
+
+The twin's **Models › Runs** lists its runs, the model version each ran and how it ended:
+
+![The Runs list on the twin's Models tab: the run tau-600 of tank-fmu v1 on the scenario "The inflow step", done, 1800 samples](docs/ui-runs.png)
+
+**Request a run** picks the model, a scenario and the parameters, which the FMU's own parameters
+shape, with their units and bounds:
+
+![The Request a run dialog: model tank-fmu, scenario The inflow step, parameters tau_s 600 and water_start 20](docs/ui-request.png)
+
+The sandbox runs it with no machine of yours alive. The run's page charts the simulated water,
+dashed, over the measured water, and scores one against the other:
+
+![A finished run: its model and parameters, the simulated water over the measured water, and the scores, a mean absolute error of 0.041 °C](docs/ui-run.png)
 
 ## Licence
 
