@@ -6,10 +6,12 @@
     uv run python scripts/model.py entry      # the kind's `models` entry, from the FMU
     uv run python scripts/model.py register   # the FMU as the model's next version
 
-`build` needs Docker. `test` loads the FMU's Linux x86-64 binary, so it runs on Linux x86-64 (CI
-does). `entry` reads only the FMU's description and runs anywhere. `register` needs TWINHUB_TOKEN,
-the personal token of a model author of your org, and TWIN_ID, a twin of the kind; TWINHUB_URL is
-the platform (https://dtp.twinhub.nl by default). The version names the commit it is built from.
+`build` needs Docker and git: it fetches each library `model.toml` names at its commit into
+build/libraries/, then builds with no network. `test` loads the FMU's Linux x86-64 binary, so it
+runs on Linux x86-64 (CI does). `entry` reads only the FMU's description and runs anywhere.
+`register` needs TWINHUB_TOKEN, the personal token of a model author of your org, and TWIN_ID, a
+twin of the kind; TWINHUB_URL is the platform (https://dtp.twinhub.nl by default). The version
+names the commit it is built from.
 """
 
 from __future__ import annotations
@@ -37,13 +39,50 @@ def openmodelica_version() -> str:
     return tag.removeprefix("v").split("-")[0]
 
 
+def git(*args: str, cwd: Path) -> str:
+    return subprocess.run(  # noqa: S603 -- git, with model.toml's repositories and commits
+        ["git", *args],  # noqa: S607
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def libraries() -> list[str]:
+    """Each library at its commit in build/libraries/<name>, fetched only when it is not there
+    yet; their paths inside the build's container, for OPENMODELICALIBRARY."""
+    paths = []
+    for name, lib in CONFIG.get("libraries", {}).items():
+        where = ROOT / "build" / "libraries" / name
+        if not (where / ".git").is_dir():
+            where.mkdir(parents=True, exist_ok=True)
+            git("init", "--quiet", cwd=where)
+            git("remote", "add", "origin", lib["git"], cwd=where)
+        git("remote", "set-url", "origin", lib["git"], cwd=where)
+        try:
+            here = git("rev-parse", "HEAD", cwd=where)
+        except subprocess.CalledProcessError:
+            here = ""
+        if here != lib["commit"]:
+            print(f"fetching {name} at {lib['commit'][:12]} from {lib['git']}")
+            git("fetch", "--quiet", "--depth", "1", "origin", lib["commit"], cwd=where)
+            git("checkout", "--quiet", "--force", "--detach", "FETCH_HEAD", cwd=where)
+        if git("rev-parse", "HEAD", cwd=where) != lib["commit"]:
+            raise SystemExit(f"library {name} is not at {lib['commit']}")
+        paths.append(f"/work/build/libraries/{name}")
+    return paths
+
+
 def build() -> None:
     FMU.unlink(missing_ok=True)
+    library_path = ":".join(libraries())
     uid = f"{os.getuid()}:{os.getgid()}" if hasattr(os, "getuid") else "0:0"
     subprocess.run(  # noqa: S603 -- the image is model.toml's, pinned by digest
         [  # noqa: S607
             *("docker", "run", "--rm", "--network", "none", "--platform", "linux/amd64"),
             *("--user", uid, "-e", "HOME=/tmp", "-v", f"{ROOT}:/work", "-w", "/work"),
+            *("-e", f"OPENMODELICALIBRARY={library_path}"),
             CONFIG["openmodelica_image"],
             *("omc", "build.mos"),
         ],

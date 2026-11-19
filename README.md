@@ -19,7 +19,7 @@ The example is a tank whose water follows its inflow: `der(water) = (inflow - wa
 | --- | --- |
 | `Model/package.mo` | the Modelica package; `Model.Tank` is the model |
 | `build.mos` | OpenModelica's script that exports it: FMI 2.0 co-simulation, CVODE inside |
-| `model.toml` | the FMU's name, the model's id, OpenModelica's pinned image, how each input meets a run's grid, what it replays and is scored against, the reference test's tolerance |
+| `model.toml` | the FMU's name, the model's id, OpenModelica's pinned image, the Modelica libraries at their commits, how each input meets a run's grid, what it replays and is scored against, the reference test's tolerance |
 | `reference/inputs.csv`, `reference/outputs.csv` | inputs fed to the FMU one row per step, and the outputs they must give |
 | `scripts/model.py` | `build`, `test`, `entry` and `register`, all reading `model.toml` |
 | `.github/workflows/ci.yml` | the build and the test on every push; the registration on a tag `v*` |
@@ -36,6 +36,14 @@ Edit `Model/package.mo` in OMEdit (OpenModelica's editor) or as text. Each `inpu
 what the platform feeds and reads, and each `parameter` is a run's parameter with its default. A
 variable's `unit` must be the unit the kind declares for it. When you rename the model or the
 package, change `build.mos` (the class and `fileNamePrefix`) and `fmu` in `model.toml` with it.
+
+**Libraries.** The tank uses the Modelica Standard Library's units. `model.toml` names every
+library the model uses as a git repository at a full commit: the Standard Library is v4.1.0, as
+`uses` in `Model/package.mo` says. `build` fetches each one into `build/libraries/` once, then
+builds with no network, so a version on the platform was built from exactly those commits. To use
+another library, such as LBNL's [Buildings](https://github.com/lbl-srg/modelica-buildings), add
+its repository and the commit of a release under `[libraries]`, and its `uses` to your package.
+OMEdit brings its own copy of the Standard Library; open the same version there.
 
 ```sh
 uv run python scripts/model.py build   # Tank.fmu, built for Linux x86-64 in OpenModelica's image
