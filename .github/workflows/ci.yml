@@ -9,12 +9,17 @@ name: model
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
     tags: ["v*"]
   pull_request:
 
 permissions:
   contents: read
+
+# bash with pipefail, so `entry | tee` fails when `entry` does.
+defaults:
+  run:
+    shell: bash
 
 jobs:
   build:
@@ -36,6 +41,7 @@ jobs:
           path: |
             *.fmu
             kind-entry.json
+            build/built-from
           if-no-files-found: error
 
   register:

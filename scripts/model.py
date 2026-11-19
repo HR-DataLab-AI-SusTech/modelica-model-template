@@ -29,6 +29,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = tomllib.loads((ROOT / "model.toml").read_text(encoding="utf-8"))
 FMU = ROOT / CONFIG["fmu"]
+BUILT_FROM = ROOT / "build" / "built-from"
 INPUTS_CSV = ROOT / "reference" / "inputs.csv"
 OUTPUTS_CSV = ROOT / "reference" / "outputs.csv"
 
@@ -74,13 +75,23 @@ def libraries() -> list[str]:
     return paths
 
 
+def commit() -> str:
+    """The commit the working tree is, or "" when a tracked file differs from it."""
+    if git("status", "--porcelain", "--untracked-files=no", cwd=ROOT):
+        return ""
+    return git("rev-parse", "HEAD", cwd=ROOT)
+
+
 def build() -> None:
     FMU.unlink(missing_ok=True)
+    BUILT_FROM.unlink(missing_ok=True)
     library_path = ":".join(libraries())
     uid = f"{os.getuid()}:{os.getgid()}" if hasattr(os, "getuid") else "0:0"
     subprocess.run(  # noqa: S603 -- the image is model.toml's, pinned by digest
         [  # noqa: S607
             *("docker", "run", "--rm", "--network", "none", "--platform", "linux/amd64"),
+            # Labelled, so a caller whose time runs out removes the container, not leaves it.
+            *("--label", "modelica-model.build=1"),
             *("--user", uid, "-e", "HOME=/tmp", "-v", f"{ROOT}:/work", "-w", "/work"),
             *("-e", f"OPENMODELICALIBRARY={library_path}"),
             CONFIG["openmodelica_image"],
@@ -90,6 +101,8 @@ def build() -> None:
     )
     if not FMU.is_file():
         raise SystemExit(f"build.mos wrote no {FMU.name}: read omc's messages above")
+    BUILT_FROM.parent.mkdir(exist_ok=True)
+    BUILT_FROM.write_text(commit() + "\n", encoding="utf-8")
     print(f"built {FMU.name}, {FMU.stat().st_size} bytes")
 
 
@@ -121,6 +134,8 @@ def simulate() -> tuple[list[str], list[dict[str, float]]]:
         if "default" in schema
     }
     given = rows(INPUTS_CSV)
+    if not given or given[0]["time"] != 0:
+        raise SystemExit("reference/inputs.csv starts at time 0, as every run in the sandbox does")
     names = list(described.inputs)
     outputs = list(described.outputs)
     out: list[dict[str, float]] = []
@@ -156,28 +171,26 @@ def test(write: bool) -> None:
 
 
 def entry() -> dict[str, Any]:
-    entry: dict[str, Any] = (
-        model()
-        .describe()
-        .manifest_entry(
-            CONFIG["model_id"],
-            replays=CONFIG.get("replays", {}),
-            compares_to=CONFIG.get("compares_to", {}),
+    """The kind's entry; anything FMPy prints while it reads the FMU goes to stderr, so stdout
+    holds the entry alone (FMPy prints a warning on Linux on Arm)."""
+    sys.stdout.flush()
+    stdout = os.dup(1)
+    os.dup2(2, 1)
+    try:
+        entry: dict[str, Any] = (
+            model()
+            .describe()
+            .manifest_entry(
+                CONFIG["model_id"],
+                replays=CONFIG.get("replays", {}),
+                compares_to=CONFIG.get("compares_to", {}),
+            )
         )
-    )
+    finally:
+        sys.stdout.flush()
+        os.dup2(stdout, 1)
+        os.close(stdout)
     return entry
-
-
-def commit() -> str:
-    if sha := os.environ.get("GITHUB_SHA"):
-        return sha
-    return subprocess.run(
-        ["git", "rev-parse", "HEAD"],  # noqa: S607
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
 
 
 def register() -> None:
@@ -189,7 +202,13 @@ def register() -> None:
             "register needs TWINHUB_TOKEN (a model author's personal token) and TWIN_ID; in "
             "GitHub, the repository's secret TWINHUB_TOKEN and its variable TWIN_ID"
         )
+    built = BUILT_FROM.read_text(encoding="utf-8").strip() if BUILT_FROM.is_file() else ""
     sha = commit()
+    if not built or built != sha:
+        raise SystemExit(
+            f"{FMU.name} was not built from this commit with a clean tree: commit your changes, "
+            "then build again before you register, so the version names what built it"
+        )
     repo = os.environ.get("GITHUB_REPOSITORY", ROOT.name)
     with Client(
         token=token,

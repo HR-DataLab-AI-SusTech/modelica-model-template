@@ -9,6 +9,9 @@ requests a run on the twin's page. The guide
 [Your model on the platform](https://dtp.twinhub.nl/learn/your-model-on-the-platform) walks
 through it from the start.
 
+⚠️ The sandbox does not run on dtp.twinhub.nl yet: a version registers there now, and a run of it
+waits until the sandbox runs.
+
 The example is a tank whose water follows its inflow: `der(water) = (inflow - water) / tau_s`.
 
 ![The tank: the inflow goes in, the water comes out, der(water) = (inflow - water) / tau_s](docs/tank.svg)
@@ -61,7 +64,8 @@ uv run python scripts/model.py test --write   # reference/outputs.csv from the F
 
 ![The reference test: the inflow steps from 20 to 60 °C at 300 s, and the water rises towards it](docs/reference.svg)
 
-Rewrite the reference only when you mean the model's answer to change, and check the new numbers
+`reference/inputs.csv` starts at time 0, as every run does. Rewrite the reference only when
+you mean the model's answer to change, and check the new numbers
 before you commit them. For the tank, the answer is known: after the inflow steps from 20 to
 60 °C at 300 s, `water = 60 - 40·exp(-(t - 300)/600)`. Put inputs into `reference/inputs.csv` that
 exercise your model. Each row is held over the step to the next, as the sandbox holds a run's
