@@ -1,6 +1,6 @@
 // Builds Tank.fmu from Model/package.mo: FMI 2.0 co-simulation, CVODE inside, a binary for the
-// machine it runs on. `uv run python scripts/model.py build` runs it in OpenModelica's image for
+// machine it runs on, and the package's Resources (a data file the model reads) inside it. `uv run python scripts/model.py build` runs it in OpenModelica's image for
 // Linux x86-64, the binary the platform's sandbox runs.
 setCommandLineOptions("--fmiFlags=s:cvode"); getErrorString();
 loadFile("Model/package.mo"); getErrorString();
-buildModelFMU(Model.Tank, version = "2.0", fmuType = "cs", platforms = {"static"}, fileNamePrefix = "Tank"); getErrorString();
+buildModelFMU(Model.Tank, version = "2.0", fmuType = "cs", platforms = {"static"}, fileNamePrefix = "Tank", includeResources = true); getErrorString();

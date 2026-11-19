@@ -11,11 +11,13 @@ openmodelica_image = "openmodelica/openmodelica:v1.27.1-minimal@sha256:ac9a0223e
 
 # The Modelica libraries the model uses, each a git repository at a full commit. `build` fetches
 # them into build/libraries/ and builds with no network, so the commit says exactly what built the
-# FMU. The Modelica Standard Library is v4.1.0, the version `uses` in Model/package.mo names; add
-# another library the same way, its repository's root holding the library's folder.
+# FMU. The Modelica Standard Library is v4.1.0, the version `uses` in Model/package.mo names, in
+# OpenModelica's own distribution (4.1.0+maint.om): its ModelicaServices finds a modelica:// file
+# inside an FMU, where the upstream one does not. Add another library the same way, its
+# repository's root holding the library's folder (OpenModelica's index names the commit).
 [libraries.ModelicaStandardLibrary]
-git = "https://github.com/modelica/ModelicaStandardLibrary.git"
-commit = "8ae3d35c24e519cb2996cab20f3b13daf2b0c50a"
+git = "https://github.com/OpenModelica/OpenModelica-ModelicaStandardLibrary.git"
+commit = "8df0769a9cee6ad04ddfff95faee64cd70f662ec"
 
 # How a replayed series meets the run's grid, per input: `policy` (hold, linear or nearest) and
 # the longest gap in seconds a run accepts (`max_gap_s`).

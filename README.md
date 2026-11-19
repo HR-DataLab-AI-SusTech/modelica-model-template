@@ -42,11 +42,17 @@ package, change `build.mos` (the class and `fileNamePrefix`) and `fmu` in `model
 
 **Libraries.** The tank uses the Modelica Standard Library's units. `model.toml` names every
 library the model uses as a git repository at a full commit: the Standard Library is v4.1.0, as
-`uses` in `Model/package.mo` says. `build` fetches each one into `build/libraries/` once, then
+`uses` in `Model/package.mo` says, in OpenModelica's own distribution, whose `ModelicaServices`
+finds a data file inside an FMU. `build` fetches each one into `build/libraries/` once, then
 builds with no network, so a version on the platform was built from exactly those commits. To use
 another library, such as LBNL's [Buildings](https://github.com/lbl-srg/modelica-buildings), add
 its repository and the commit of a release under `[libraries]`, and its `uses` to your package.
 OMEdit brings its own copy of the Standard Library; open the same version there.
+
+**Data files.** A table the model reads, a route or a measured curve, goes in the package's
+`Resources/` folder and is named `modelica://<Package>/Resources/<file>`, for instance as a
+`CombiTable1Ds` with `tableOnFile = true`. The build puts it inside the FMU, where the sandbox's
+run reads it: no data file is copied into Modelica code, whatever its size.
 
 ```sh
 uv run python scripts/model.py build   # Tank.fmu, built for Linux x86-64 in OpenModelica's image
