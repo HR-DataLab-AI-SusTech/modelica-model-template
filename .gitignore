@@ -1,0 +1,9 @@
+*.fmu
+build/
+.venv/
+__pycache__/
+# OpenModelica's build leaves these beside build.mos
+*.log
+*.json.tmp
+Tank_*
+index.html

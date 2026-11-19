@@ -1,0 +1,58 @@
+# Every push builds the FMU in OpenModelica's pinned image, holds it to reference/ and keeps it as
+# an artifact; a tag `v*` also registers it as the model's next version on the platform.
+#
+# For `register`, set in the repository's Settings › Secrets and variables › Actions:
+#   secret   TWINHUB_TOKEN  the personal token of a model author of your org
+#   variable TWIN_ID        a twin of the kind the model belongs to
+#   variable TWINHUB_URL    the platform, when it is not https://dtp.twinhub.nl
+name: model
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: uv sync --frozen
+      - name: Build the FMU
+        run: uv run --frozen python scripts/model.py build
+      - name: Hold it to the reference
+        run: uv run --frozen python scripts/model.py test
+      - name: The kind's models entry
+        run: uv run --frozen python scripts/model.py entry | tee kind-entry.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fmu
+          path: |
+            *.fmu
+            kind-entry.json
+          if-no-files-found: error
+
+  register:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: fmu
+      - run: uv sync --frozen
+      - name: Register the FMU as the model's next version
+        env:
+          TWINHUB_TOKEN: ${{ secrets.TWINHUB_TOKEN }}
+          TWIN_ID: ${{ vars.TWIN_ID }}
+          TWINHUB_URL: ${{ vars.TWINHUB_URL }}
+        run: uv run --frozen python scripts/model.py register

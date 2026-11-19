@@ -1,0 +1,29 @@
+# What this repository builds, tests and registers. `scripts/model.py` reads it; change it with
+# the model.
+
+# The FMU build.mos writes (its fileNamePrefix), and the model's id in the kind's `models`.
+fmu = "Tank.fmu"
+model_id = "tank-fmu"
+
+# OpenModelica's image, pinned by digest: CI builds the FMU in it, and a registered version
+# names its release.
+openmodelica_image = "openmodelica/openmodelica:v1.27.1-minimal@sha256:ac9a0223e69b8055d444b42f58ccb9680342b56848c68b81385bf83d7c0ba824"
+
+# How a replayed series meets the run's grid, per input: `policy` (hold, linear or nearest) and
+# the longest gap in seconds a run accepts (`max_gap_s`).
+[inputs.inflow]
+policy = "linear"
+max_gap_s = 600
+
+# The measured channel (`source:channel`) a scenario may replay into each input.
+[replays]
+inflow = "sensor:inflow"
+
+# The measured channel each output is scored against.
+[compares_to]
+water = "sensor:water"
+
+# The reference test: reference/inputs.csv fed to the FMU, one step per row, must give
+# reference/outputs.csv within this absolute tolerance, in each output's unit.
+[reference]
+tolerance = 0.001
