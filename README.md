@@ -50,9 +50,11 @@ its repository and the commit of a release under `[libraries]`, and its `uses` t
 OMEdit brings its own copy of the Standard Library; open the same version there.
 
 **Data files.** A table the model reads, a route or a measured curve, goes in the package's
-`Resources/` folder and is named `modelica://<Package>/Resources/<file>`, for instance as a
-`CombiTable1Ds` with `tableOnFile = true`. The build puts it inside the FMU, where the sandbox's
-run reads it: no data file is copied into Modelica code, whatever its size.
+`Resources/` folder, and the model names it through `loadResource`, for instance a
+`CombiTable1Ds` with `tableOnFile = true` and
+`fileName = Modelica.Utilities.Files.loadResource("modelica://Model/Resources/<file>")`. The
+build puts it inside the FMU, where the sandbox's run reads it: no data file is copied into
+Modelica code, whatever its size.
 
 ```sh
 uv run python scripts/model.py build   # Tank.fmu, built for Linux x86-64 in OpenModelica's image
