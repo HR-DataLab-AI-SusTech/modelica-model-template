@@ -9,8 +9,8 @@ requests a run on the twin's page. The guide
 [Your model on the platform](https://dtp.twinhub.nl/learn/your-model-on-the-platform) walks
 through it from the start.
 
-⚠️ The sandbox does not run on dtp.twinhub.nl yet: a version registers there now, and a run of it
-waits until the sandbox runs.
+⚠️ On dtp.twinhub.nl the sandbox runs a kind's models once a platform admin has given it a
+credential for that kind: ask for it when you become a model author, or a run waits `requested`.
 
 The example is a tank whose water follows its inflow: `der(water) = (inflow - water) / tau_s`.
 
