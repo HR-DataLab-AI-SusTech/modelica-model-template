@@ -5,13 +5,17 @@
     uv run python scripts/model.py test --write   # reference/outputs.csv from the FMU
     uv run python scripts/model.py entry      # the kind's `models` entry, from the FMU
     uv run python scripts/model.py register   # the FMU as the model's next version
+    uv run python scripts/model.py register --dry-run   # what `register` sends, sending nothing
 
 `build` needs Docker and git: it fetches each library `model.toml` names at its commit into
 build/libraries/, then builds with no network. `test` loads the FMU's Linux x86-64 binary, so it
-runs on Linux x86-64 (CI does). `entry` reads only the FMU's description and runs anywhere.
+runs on Linux x86-64 (CI does). `entry` reads only the FMU's description and runs anywhere;
+it adds the table files the model reads (`[table_files.<parameter>]`) and the outputs that are its
+position (`[position]`) when `model.toml` names them.
 `register` needs TWINHUB_TOKEN, the personal token of a model author of your org, and TWIN_ID, a
 twin of the kind; TWINHUB_URL is the platform (https://dtp.twinhub.nl by default). The version
-names the commit it is built from.
+names the commit it is built from, the repository that commit is in (from GitHub Actions, else
+from an https GitHub `origin`), and carries docs/model.md and docs/diagram.svg when they exist.
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ import csv
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import tomllib
@@ -32,6 +37,9 @@ FMU = ROOT / CONFIG["fmu"]
 BUILT_FROM = ROOT / "build" / "built-from"
 INPUTS_CSV = ROOT / "reference" / "inputs.csv"
 OUTPUTS_CSV = ROOT / "reference" / "outputs.csv"
+GUIDE = ROOT / "docs" / "model.md"
+DIAGRAM = ROOT / "docs" / "diagram.svg"
+TABLE_FORMATS = ("tables", "road_route")
 
 
 def openmodelica_version() -> str:
@@ -172,6 +180,42 @@ def test(write: bool) -> None:
         raise SystemExit("the FMU does not give reference/outputs.csv within the tolerance")
 
 
+def table_files(described: Any) -> dict[str, dict[str, str]]:
+    """`[table_files.<parameter>]`: each a String parameter of the FMU that takes a table file's
+    path, its `format` and an optional `description`."""
+    props = described.parameters.get("properties", {})
+    strings = sorted(n for n, p in props.items() if p.get("type") == "string")
+    files = {}
+    for name, spec in CONFIG.get("table_files", {}).items():
+        where = f"model.toml's [table_files.{name}]"
+        if name not in strings:
+            raise SystemExit(
+                f"{where} names no String parameter of {FMU.name}; its String parameters are "
+                f"{strings or 'none'} (a top-level `parameter String` with a literal default)"
+            )
+        if unknown := sorted(set(spec) - {"format", "description"}):
+            raise SystemExit(f"{where} has unknown keys {unknown}: it takes format, description")
+        if spec.get("format") not in TABLE_FORMATS:
+            raise SystemExit(f"{where} needs format = one of {list(TABLE_FORMATS)}")
+        files[name] = {k: str(v) for k, v in spec.items()}
+    return files
+
+
+def position(described: Any) -> tuple[str, str] | None:
+    """`[position]`: the outputs that are the model's latitude and longitude, in degrees."""
+    spec = CONFIG.get("position")
+    if spec is None:
+        return None
+    if sorted(spec) != ["lat", "lon"]:
+        raise SystemExit("model.toml's [position] names two outputs, lat and lon, and nothing else")
+    if unknown := [o for o in (spec["lat"], spec["lon"]) if o not in described.outputs]:
+        raise SystemExit(
+            f"model.toml's [position] names {unknown}, not outputs of {FMU.name}; its outputs "
+            f"are {sorted(described.outputs)}"
+        )
+    return spec["lat"], spec["lon"]
+
+
 def entry() -> dict[str, Any]:
     """The kind's entry; anything FMPy prints while it reads the FMU goes to stderr, so stdout
     holds the entry alone (FMPy prints a warning on Linux on Arm)."""
@@ -179,14 +223,18 @@ def entry() -> dict[str, Any]:
     stdout = os.dup(1)
     os.dup2(2, 1)
     try:
-        entry: dict[str, Any] = (
-            model()
-            .describe()
-            .manifest_entry(
-                CONFIG["model_id"],
-                replays=CONFIG.get("replays", {}),
-                compares_to=CONFIG.get("compares_to", {}),
-            )
+        described = model().describe()
+        # Only what model.toml declares, so a model with neither runs on an SDK that has neither.
+        declared: dict[str, Any] = {}
+        if files := table_files(described):
+            declared["table_files"] = files
+        if (where := position(described)) is not None:
+            declared["position"] = where
+        entry: dict[str, Any] = described.manifest_entry(
+            CONFIG["model_id"],
+            replays=CONFIG.get("replays", {}),
+            compares_to=CONFIG.get("compares_to", {}),
+            **declared,
         )
     finally:
         sys.stdout.flush()
@@ -195,22 +243,54 @@ def entry() -> dict[str, Any]:
     return entry
 
 
-def register() -> None:
-    from twinhub import Client
+def source_repository() -> str | None:
+    """The https URL of the repository the commit is in: GitHub Actions' server and repository,
+    else `origin` when it is an https GitHub URL (one with credentials in it is not used)."""
+    server, repo = os.environ.get("GITHUB_SERVER_URL"), os.environ.get("GITHUB_REPOSITORY")
+    if server and repo:
+        return f"{server}/{repo}"
+    try:
+        origin = git("remote", "get-url", "origin", cwd=ROOT).removesuffix(".git")
+    except subprocess.CalledProcessError:
+        return None
+    return origin if re.fullmatch(r"https://github\.com/[\w.-]+/[\w.-]+", origin) else None
 
+
+def register(dry_run: bool) -> None:
     token, twin = os.environ.get("TWINHUB_TOKEN"), os.environ.get("TWIN_ID")
-    if not token or not twin:
+    if not dry_run and (not token or not twin):
         raise SystemExit(
             "register needs TWINHUB_TOKEN (a model author's personal token) and TWIN_ID; in "
             "GitHub, the repository's secret TWINHUB_TOKEN and its variable TWIN_ID"
         )
     built = BUILT_FROM.read_text(encoding="utf-8").strip() if BUILT_FROM.is_file() else ""
     sha = commit()
+    stale = (
+        f"{FMU.name} was not built from this commit with a clean tree: commit your changes, "
+        "then build again before you register, so the version names what built it"
+    )
     if not built or built != sha:
-        raise SystemExit(
-            f"{FMU.name} was not built from this commit with a clean tree: commit your changes, "
-            "then build again before you register, so the version names what built it"
-        )
+        if not dry_run:
+            raise SystemExit(stale)
+        print(f"register would refuse: {stale}")
+    repository = source_repository()
+    guide = GUIDE if GUIDE.is_file() else None
+    diagram = DIAGRAM if DIAGRAM.is_file() else None
+    print("would send:" if dry_run else "sending:")
+    for field, value in {
+        "model": f"{CONFIG['model_id']} of twin {twin or '$TWIN_ID'}",
+        "fmu": FMU.name,
+        "source_commit": sha or "(none: the tree differs from HEAD)",
+        "openmodelica_version": openmodelica_version(),
+        "source_repository": repository or "(none: not in GitHub Actions, no https GitHub origin)",
+        "guide": guide.relative_to(ROOT) if guide else "(none: no docs/model.md)",
+        "diagram": diagram.relative_to(ROOT) if diagram else "(none: no docs/diagram.svg)",
+    }.items():
+        print(f"  {field}: {value}")
+    if dry_run:
+        return
+    from twinhub import Client
+
     repo = os.environ.get("GITHUB_REPOSITORY", ROOT.name)
     with Client(
         token=token,
@@ -223,6 +303,9 @@ def register() -> None:
             fmu=FMU,
             source_commit=sha,
             openmodelica_version=openmodelica_version(),
+            source_repository=repository,
+            guide=guide,
+            diagram=diagram,
         )
     print(f"version {version.version} of {CONFIG['model_id']}, built from {sha[:12]}")
 
@@ -238,7 +321,9 @@ def main(argv: list[str]) -> None:
         case ["entry"]:
             print(json.dumps(entry(), indent=2))
         case ["register"]:
-            register()
+            register(dry_run=False)
+        case ["register", "--dry-run"]:
+            register(dry_run=True)
         case _:
             raise SystemExit(__doc__)
 
