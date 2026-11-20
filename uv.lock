@@ -476,7 +476,7 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "twinhub", extras = ["fmu"], specifier = ">=4.0,<5", index = "https://dtp.twinhub.nl/sdk/simple" }]
+requires-dist = [{ name = "twinhub", extras = ["fmu"], specifier = ">=4.2,<5", index = "https://dtp.twinhub.nl/sdk/simple" }]
 
 [[package]]
 name = "msgpack"
@@ -1059,14 +1059,14 @@ wheels = [
 
 [[package]]
 name = "twinhub"
-version = "4.0.0"
+version = "4.2.0"
 source = { registry = "https://dtp.twinhub.nl/sdk/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
 ]
 wheels = [
-    { url = "https://dtp.twinhub.nl/sdk/files/twinhub-4.0.0-py3-none-any.whl", hash = "sha256:28935ddd4506d57727a3aaafe9df9d75789e8d2a1008485da7aa0b63afd1e502" },
+    { url = "https://dtp.twinhub.nl/sdk/files/twinhub-4.2.0-py3-none-any.whl", hash = "sha256:0578c94e91c18bbab10ade61d3f51218a1277a311a9133cd873a5cecbc5ad013" },
 ]
 
 [package.optional-dependencies]
