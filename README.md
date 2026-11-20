@@ -14,7 +14,7 @@ credential for that kind: ask for it when you become a model author, or a run wa
 
 The example is a tank whose water follows its inflow: `der(water) = (inflow - water) / tau_s`.
 
-![The tank: the inflow goes in, the water comes out, der(water) = (inflow - water) / tau_s](docs/tank.svg)
+![The tank: the inflow goes in, the water comes out, der(water) = (inflow - water) / tau_s](docs/diagram.svg)
 
 ![From this repository to a run: CI builds and tests the FMU, a tag registers it, the sandbox runs it and the platform scores it](docs/path.svg)
 
@@ -25,6 +25,7 @@ The example is a tank whose water follows its inflow: `der(water) = (inflow - wa
 | `model.toml` | the FMU's name, the model's id, OpenModelica's pinned image, the Modelica libraries at their commits, how each input meets a run's grid, what it replays and is scored against, the reference test's tolerance |
 | `reference/inputs.csv`, `reference/outputs.csv` | inputs fed to the FMU one row per step, and the outputs they must give |
 | `scripts/model.py` | `build`, `test`, `entry` and `register`, all reading `model.toml` |
+| `docs/model.md`, `docs/diagram.svg` | the model's guide and its picture, registered with each version and shown on the model's card on the platform |
 | `.github/workflows/ci.yml` | the build and the test on every push; the registration on a tag `v*` |
 
 ## Start
@@ -55,6 +56,27 @@ OMEdit brings its own copy of the Standard Library; open the same version there.
 `fileName = Modelica.Utilities.Files.loadResource("modelica://Model/Resources/<file>")`. The
 build puts it inside the FMU, where the sandbox's run reads it: no data file is copied into
 Modelica code, whatever its size.
+
+**A table file per run.** When a run should choose the table, a route or a weather year, the
+model takes the file's path as a top-level `parameter String` with the default `""` (and reads its
+built-in file when it is empty), and `model.toml` declares it under `[table_files.<parameter>]`
+with its `format`, `"tables"` or the platform's `"road_route"`, and a `description`. A scenario
+then carries the tables, the sandbox writes them to a file and sets the parameter to its path, and
+the parameter leaves the run dialog. A model whose outputs are where it is names them under
+`[position]` (`lat` and `lon`, in degrees), and the platform draws its runs on a map. The tank
+needs neither. A `road_route` file holds a table `route`, a row per point along the road
+(distance m, strictly increasing, planned speed m/s, speed limit m/s, latitude and longitude deg),
+and a table `lights` (index, distance m, red time s, its last row far past the route).
+
+```toml
+[table_files.routeFile]
+format = "road_route"
+description = "The route the vehicle drives"
+
+[position]
+lat = "lat"
+lon = "lon"
+```
 
 ```sh
 uv run python scripts/model.py build   # Tank.fmu, built for Linux x86-64 in OpenModelica's image
@@ -95,6 +117,12 @@ inputs over each step.
    commit it was built from and the OpenModelica release that built it. The platform refuses an
    FMU it cannot run, or one that differs from the kind's entry, and the job's log names the
    reason (the guide lists them).
+
+`register` also sends the repository the commit is in, so the platform links to the code that
+ran, and `docs/model.md` and `docs/diagram.svg`: the guide and the picture the model's card shows
+beside its inputs, outputs and parameters. Write the guide for someone who meets the model on the
+platform (what it is, where its equations are, what to change), and keep both with the model.
+`uv run python scripts/model.py register --dry-run` prints what it would send, sending nothing.
 
 A new version serves the runs requested after it.
 
