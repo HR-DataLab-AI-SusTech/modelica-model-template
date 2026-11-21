@@ -10,8 +10,8 @@
 `build` needs Docker and git: it fetches each library `model.toml` names at its commit into
 build/libraries/, then builds with no network. `test` loads the FMU's Linux x86-64 binary, so it
 runs on Linux x86-64 (CI does). `entry` reads only the FMU's description and runs anywhere;
-it adds the table files the model reads (`[table_files.<parameter>]`) and the outputs that are its
-position (`[position]`) when `model.toml` names them.
+it adds the table files the model reads (`[table_files.<parameter>]`), the outputs that are its
+position (`[position]`) and the output that ends a run (`ends_when`) when `model.toml` names them.
 `register` needs TWINHUB_TOKEN, the personal token of a model author of your org, and TWIN_ID, a
 twin of the kind; TWINHUB_URL is the platform (https://dtp.twinhub.nl by default). The version
 names the commit it is built from, the repository that commit is in (from GitHub Actions, else
@@ -216,6 +216,20 @@ def position(described: Any) -> tuple[str, str] | None:
     return spec["lat"], spec["lon"]
 
 
+def ends_when(described: Any) -> str | None:
+    """`ends_when`: the output that ends a run once it is not 0 (a vehicle arrived, a battery
+    full), so the scenario's duration is only the run's bound."""
+    name = CONFIG.get("ends_when")
+    if name is None:
+        return None
+    if not isinstance(name, str) or name not in described.outputs:
+        raise SystemExit(
+            f"model.toml's ends_when names {name!r}, not an output of {FMU.name}; its outputs "
+            f"are {sorted(described.outputs)}"
+        )
+    return name
+
+
 def entry() -> dict[str, Any]:
     """The kind's entry; anything FMPy prints while it reads the FMU goes to stderr, so stdout
     holds the entry alone (FMPy prints a warning on Linux on Arm)."""
@@ -230,6 +244,8 @@ def entry() -> dict[str, Any]:
             declared["table_files"] = files
         if (where := position(described)) is not None:
             declared["position"] = where
+        if (end := ends_when(described)) is not None:
+            declared["ends_when"] = end
         entry: dict[str, Any] = described.manifest_entry(
             CONFIG["model_id"],
             replays=CONFIG.get("replays", {}),

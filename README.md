@@ -63,12 +63,18 @@ built-in file when it is empty), and `model.toml` declares it under `[table_file
 with its `format`, `"tables"` or the platform's `"road_route"`, and a `description`. A scenario
 then carries the tables, the sandbox writes them to a file and sets the parameter to its path, and
 the parameter leaves the run dialog. A model whose outputs are where it is names them under
-`[position]` (`lat` and `lon`, in degrees), and the platform draws its runs on a map. The tank
-needs neither. A `road_route` file holds a table `route`, a row per point along the road
+`[position]` (`lat` and `lon`, in degrees), and the platform draws its runs on a map. A model
+whose job can end before the scenario's duration (a vehicle arrived, a battery full) names the
+output that says so in `ends_when`, at the top of `model.toml`: the first step after which it is
+not 0 ends the run there, so the duration is only its bound. A Modelica `Boolean` output that turns
+true does it; `terminate()` does not, as OpenModelica's FMU answers it with an error. The tank
+needs none of these. A `road_route` file holds a table `route`, a row per point along the road
 (distance m, strictly increasing, planned speed m/s, speed limit m/s, latitude and longitude deg),
 and a table `lights` (index, distance m, red time s, its last row far past the route).
 
 ```toml
+ends_when = "arrived"   # at the top, before the first [table]
+
 [table_files.routeFile]
 format = "road_route"
 description = "The route the vehicle drives"
