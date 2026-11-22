@@ -123,6 +123,9 @@ inputs over each step.
    commit it was built from and the OpenModelica release that built it. The platform refuses an
    FMU it cannot run, or one that differs from the kind's entry, and the job's log names the
    reason (the guide lists them).
+5. **A later change of interface.** A new or changed input, output or parameter changes the
+   entry: put the new `entry` in the kind before you tag, or the registration is refused and its
+   log names what the kind does not declare.
 
 `register` also sends the repository the commit is in, so the platform links to the code that
 ran, and `docs/model.md` and `docs/diagram.svg`: the guide and the picture the model's card shows
